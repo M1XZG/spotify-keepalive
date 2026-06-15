@@ -62,6 +62,19 @@ python keepalive.py
 First run opens a browser for one-time authorization. After that the token is
 cached in `.spotify_cache`. Leave the script running; press `Ctrl+C` to stop.
 
+## Pause / resume from chat (Streamer.bot)
+
+You can temporarily pause the monitor (e.g. to play Spotify on your phone in the
+car) with `!spm off` / `!spm on` chat commands. See
+[Streamer.bot Control](STREAMERBOT.md) for the setup and the included C#
+scripts. The same controls are available on the CLI:
+
+```pwsh
+python keepalive.py --pause 30   # pause 30 min, then auto-resume
+python keepalive.py --resume     # resume now
+python keepalive.py --status     # show ACTIVE / PAUSED
+```
+
 ## Notes & limitations
 
 - Spotify cannot transfer to a device it can't see. If the speaker/app is fully
