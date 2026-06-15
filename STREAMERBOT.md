@@ -20,13 +20,25 @@ watchdog does nothing. Streamer.bot just creates it (pause) or deletes it
 > may resume up to ~2 minutes after the deadline. Pauses shorter than the
 > watchdog interval aren't meaningful.
 
-## Quick import
+## Quick import (recommended)
 
-The whole setup (command + action) can be imported in one step. In Streamer.bot
-go to **Import**, paste the string from
-[streamerbot/spotify-monitor-import.sb](streamerbot/spotify-monitor-import.sb),
-and import. Then just set the `spmFlagFile` global variable (step 2 below) to
-your flag path. If you import, you can skip step 3.
+You can import the whole `!spm` command and its C# action in one step, just like
+any other Streamer.bot import string:
+
+1. Open the file
+   [streamerbot/spotify-monitor-import.sb](streamerbot/spotify-monitor-import.sb)
+   and copy its entire contents to the clipboard.
+2. In Streamer.bot, click the **Import** button on the top toolbar (or press
+   `Ctrl+I`).
+3. Paste the string into the **Import String** box — Streamer.bot shows a
+   preview of the command and action that will be added.
+4. Click **Import** to confirm.
+5. Set the `spmFlagFile` global variable to your flag path (see step 2 below),
+   and check the command's permissions (broadcaster/mods).
+
+That's it — the `!spm off` / `!spm on` / `!spm status` command is ready. If you
+import this way you can **skip step 3** below (manual command creation); steps 1
+and 2 still apply.
 
 ## 1. Point Python and Streamer.bot at the same file
 
