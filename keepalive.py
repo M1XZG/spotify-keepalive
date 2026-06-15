@@ -34,6 +34,7 @@ import os
 import subprocess
 import sys
 import time
+from datetime import datetime, timedelta, timezone
 
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
@@ -68,6 +69,14 @@ POLL_SECONDS = int(os.environ.get("SPOTIFY_POLL_SECONDS", "10"))
 # How long to wait for the Spotify app to appear on Connect after launching it.
 LAUNCH_WAIT_SECONDS = int(os.environ.get("SPOTIFY_LAUNCH_WAIT_SECONDS", "30"))
 
+# Pause sentinel file. While this file exists the watchdog does nothing, so an
+# external tool (e.g. Streamer.bot) can create it to pause the monitor and
+# delete it to resume. The CLI --pause/--resume flags manage the same file.
+PAUSE_FILE = os.environ.get(
+    "SPOTIFY_PAUSE_FILE",
+    os.path.join(os.path.dirname(__file__), "spm_pause.flag"),
+)
+
 # Scopes needed to read and control playback.
 SCOPE = "user-read-playback-state user-modify-playback-state"
 
@@ -79,6 +88,90 @@ SCOPE = "user-read-playback-state user-modify-playback-state"
 def get_client() -> spotipy.Spotify:
     auth = SpotifyOAuth(scope=SCOPE, open_browser=True, cache_path=".spotify_cache")
     return spotipy.Spotify(auth_manager=auth, requests_timeout=15)
+
+
+def is_paused() -> bool:
+    """Return True while the monitor is paused via the pause sentinel file.
+
+    The file may be empty / contain "indefinite" (paused until resumed) or hold
+    an ISO-8601 expiry timestamp written by --pause MINUTES. An expired file is
+    deleted automatically so the monitor resumes on its own.
+    """
+    if not os.path.isfile(PAUSE_FILE):
+        return False
+    try:
+        content = open(PAUSE_FILE, encoding="utf-8").read().strip()
+    except OSError:
+        return True  # exists but unreadable -> err on the side of paused
+    if not content or content.lower() == "indefinite":
+        return True
+    try:
+        expiry = datetime.fromisoformat(content)
+    except ValueError:
+        return True  # unknown content (e.g. an externally touched file) -> paused
+    if expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=timezone.utc)
+    if datetime.now(timezone.utc) >= expiry:
+        try:
+            os.remove(PAUSE_FILE)  # auto-resume
+        except OSError:
+            pass
+        return False
+    return True
+
+
+def pause_monitor(minutes=None) -> int:
+    """Create the pause sentinel file, optionally with an auto-resume expiry."""
+    parent = os.path.dirname(PAUSE_FILE)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    if minutes:
+        expiry = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+        with open(PAUSE_FILE, "w", encoding="utf-8") as f:
+            f.write(expiry.isoformat())
+        local = expiry.astimezone().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"[paused] Monitor paused for {minutes} min (auto-resumes at {local}).")
+    else:
+        with open(PAUSE_FILE, "w", encoding="utf-8") as f:
+            f.write("indefinite")
+        print("[paused] Monitor paused indefinitely. Use --resume to re-enable.")
+    return 0
+
+
+def resume_monitor() -> int:
+    """Remove the pause sentinel file so the monitor resumes."""
+    if os.path.isfile(PAUSE_FILE):
+        try:
+            os.remove(PAUSE_FILE)
+        except OSError as e:
+            print(f"[error] Could not remove pause file: {e}")
+            return 1
+        print("[resumed] Monitor re-enabled.")
+    else:
+        print("[resumed] Monitor was not paused.")
+    return 0
+
+
+def print_status() -> int:
+    """Report whether the monitor is currently paused."""
+    if not is_paused():
+        print("[status] ACTIVE - monitor is enforcing playback on the target.")
+        return 0
+    content = ""
+    try:
+        content = open(PAUSE_FILE, encoding="utf-8").read().strip()
+    except OSError:
+        pass
+    try:
+        expiry = datetime.fromisoformat(content)
+        if expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=timezone.utc)
+        mins = int((expiry - datetime.now(timezone.utc)).total_seconds() // 60)
+        local = expiry.astimezone().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"[status] PAUSED - auto-resumes in ~{mins} min (at {local}).")
+    except ValueError:
+        print("[status] PAUSED indefinitely. Use --resume to re-enable.")
+    return 0
 
 
 def find_target_device(sp: spotipy.Spotify):
@@ -168,6 +261,9 @@ def list_devices(sp: spotipy.Spotify) -> None:
 
 def ensure_playing_on_target(sp: spotipy.Spotify) -> None:
     """Core watchdog logic: keep music playing on the target device."""
+    if is_paused():
+        print("[paused] Monitor is paused; skipping this cycle.", flush=True)
+        return
     target = find_target_device(sp)
     if target is None:
         print(
@@ -248,7 +344,33 @@ def main() -> int:
         action="store_true",
         help="Run a single check-and-fix pass, then exit (for Task Scheduler).",
     )
+    parser.add_argument(
+        "--pause",
+        nargs="?",
+        const=0,
+        type=int,
+        metavar="MINUTES",
+        help="Pause the monitor (optionally for MINUTES, then auto-resume), then exit.",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume the monitor (remove the pause flag), then exit.",
+    )
+    parser.add_argument(
+        "--status",
+        action="store_true",
+        help="Print whether the monitor is paused, then exit.",
+    )
     args = parser.parse_args()
+
+    # Pause/resume/status manage a local file and need no Spotify connection.
+    if args.pause is not None:
+        return pause_monitor(args.pause or None)
+    if args.resume:
+        return resume_monitor()
+    if args.status:
+        return print_status()
 
     sp = get_client()
 
