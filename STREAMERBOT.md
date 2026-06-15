@@ -35,17 +35,40 @@ exact same path as `SPOTIFY_PAUSE_FILE` above.
   `CPH.SetGlobalVar("spmFlagFile", @"C:\Users\you\GitHub\spotify-keepalive\spm_pause.flag", true);`
   and run it once.
 
-## 3. Add the three commands
+## 3. Add the command
 
-Create three commands (`!spm off`, `!spm on`, `!spm status`). On each, add an
-**Execute C# Code** sub-action and paste the matching script:
+The simplest, most reliable setup is **one** command that handles every
+subcommand. Create a command with trigger `!spm` and **match mode "Starts
+With"**, then add a single **Execute C# Code** sub-action containing
+[streamerbot/SPM.cs](streamerbot/SPM.cs). It routes:
+
+| You type | Branch |
+| --- | --- |
+| `!spm off` / `!spm pause` / `!spm p` | pause (add a number for minutes, e.g. `!spm off 30`) |
+| `!spm on` / `!spm resume` / `!spm r` | resume |
+| `!spm status` / `!spm s` / `!spm` | status |
+
+Restrict the command to **broadcaster/mods** so viewers can't toggle your music.
+
+> **Why one command?** If you wire separate `!spm off` / `!spm on` commands and
+> the pause one keeps replying "Spotify monitor was not paused", that command is
+> actually running the *resume* branch. The dispatcher above removes that
+> ambiguity — paste only `SPM.cs` and remove any other pause/resume/status
+> sub-actions from the command.
+
+<details>
+<summary>Alternative: three separate commands</summary>
+
+If you prefer one command per action, create `!spm off`, `!spm on`, and
+`!spm status` (each **exact match**), and put the matching script on each:
 
 - `!spm off` → [streamerbot/SPM_Pause.cs](streamerbot/SPM_Pause.cs)
 - `!spm on` → [streamerbot/SPM_Resume.cs](streamerbot/SPM_Resume.cs)
 - `!spm status` → [streamerbot/SPM_Status.cs](streamerbot/SPM_Status.cs)
 
-Restrict each command to **broadcaster/mods** in its permission settings so
-viewers can't toggle your music.
+Make sure each script is on the correct command — mixing them up causes the
+"was not paused" symptom above.
+</details>
 
 ## How the flag is interpreted
 
