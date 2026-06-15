@@ -11,9 +11,22 @@ watchdog does nothing. Streamer.bot just creates it (pause) or deletes it
 | Chat command | Action | Effect |
 | --- | --- | --- |
 | `!spm off` | create flag (`indefinite`) | Pause until you resume |
-| `!spm off 30` | create flag with a 30-min expiry | Pause, then auto-resume after 30 min |
+| `!spm off 30` | create flag with a 30-min expiry | Pause, then auto-resume after 30 **minutes** |
 | `!spm on` | delete flag | Resume immediately |
 | `!spm status` | read flag | Report ACTIVE / PAUSED (+ minutes left) |
+
+> **The pause number is in minutes**, e.g. `!spm off 30` pauses for 30 minutes.
+> An expired pause is cleared by the watchdog on its next 2-minute cycle, so it
+> may resume up to ~2 minutes after the deadline. Pauses shorter than the
+> watchdog interval aren't meaningful.
+
+## Quick import
+
+The whole setup (command + action) can be imported in one step. In Streamer.bot
+go to **Import**, paste the string from
+[streamerbot/spotify-monitor-import.sb](streamerbot/spotify-monitor-import.sb),
+and import. Then just set the `spmFlagFile` global variable (step 2 below) to
+your flag path. If you import, you can skip step 3.
 
 ## 1. Point Python and Streamer.bot at the same file
 
@@ -37,10 +50,9 @@ exact same path as `SPOTIFY_PAUSE_FILE` above.
 
 ## 3. Add the command
 
-The simplest, most reliable setup is **one** command that handles every
-subcommand. Create a command with trigger `!spm` and **match mode "Starts
-With"**, then add a single **Execute C# Code** sub-action containing
-[streamerbot/SPM.cs](streamerbot/SPM.cs). It routes:
+One command handles every subcommand. Create a command with trigger `!spm` and
+**match mode "Starts With"**, then add a single **Execute C# Code** sub-action
+containing [streamerbot/SPM.cs](streamerbot/SPM.cs). It routes:
 
 | You type | Branch |
 | --- | --- |
@@ -49,26 +61,6 @@ With"**, then add a single **Execute C# Code** sub-action containing
 | `!spm status` / `!spm s` / `!spm` | status |
 
 Restrict the command to **broadcaster/mods** so viewers can't toggle your music.
-
-> **Why one command?** If you wire separate `!spm off` / `!spm on` commands and
-> the pause one keeps replying "Spotify monitor was not paused", that command is
-> actually running the *resume* branch. The dispatcher above removes that
-> ambiguity — paste only `SPM.cs` and remove any other pause/resume/status
-> sub-actions from the command.
-
-<details>
-<summary>Alternative: three separate commands</summary>
-
-If you prefer one command per action, create `!spm off`, `!spm on`, and
-`!spm status` (each **exact match**), and put the matching script on each:
-
-- `!spm off` → [streamerbot/SPM_Pause.cs](streamerbot/SPM_Pause.cs)
-- `!spm on` → [streamerbot/SPM_Resume.cs](streamerbot/SPM_Resume.cs)
-- `!spm status` → [streamerbot/SPM_Status.cs](streamerbot/SPM_Status.cs)
-
-Make sure each script is on the correct command — mixing them up causes the
-"was not paused" symptom above.
-</details>
 
 ## How the flag is interpreted
 
@@ -82,9 +74,9 @@ Both sides agree on the same rules:
 | ISO-8601 timestamp in the past | ACTIVE (Python deletes it on next run) |
 
 Timed pauses set in chat use an ISO-8601 timestamp that Python's
-`datetime.fromisoformat` reads, and the status script parses Python's format
-too — so chat and the `--status` CLI always agree regardless of which side
-created the flag.
+`datetime.fromisoformat` reads, and the `SPM.cs` status branch parses Python's
+format too — so chat and the `--status` CLI always agree regardless of which
+side created the flag.
 
 ## CLI equivalents
 
