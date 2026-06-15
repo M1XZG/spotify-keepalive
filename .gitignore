@@ -1,0 +1,6 @@
+# Secrets and runtime artifacts — never commit these.
+.env
+.spotify_cache
+.venv/
+__pycache__/
+*.log
