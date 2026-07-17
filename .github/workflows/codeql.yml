@@ -23,9 +23,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language:
-          - csharp
-          - python
+        include:
+          - language: csharp
+            build-mode: none
+          - language: python
+            build-mode: none
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -34,9 +36,7 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
-
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+          build-mode: ${{ matrix.build-mode }}
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
