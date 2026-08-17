@@ -20,6 +20,11 @@ using System.IO;
 
 public class CPHInline
 {
+    // OBS scene/source shown to viewers while the monitor is paused, i.e. when
+    // Spotify is being used elsewhere so no music is playing on stream.
+    private const string ObsScene = "Spotify stream";
+    private const string ObsSource = "Music Streaming Elsewhere";
+
     public bool Execute()
     {
         string path = CPH.GetGlobalVar<string>("spmFlagFile", true);
@@ -86,6 +91,10 @@ public class CPHInline
                 File.WriteAllText(path, "indefinite");
                 CPH.SendMessage("Spotify monitor paused. Use !spm on to resume.");
             }
+
+            // Show the "using Spotify elsewhere" notice so viewers know why
+            // there's no music on stream.
+            CPH.ObsSetSourceVisibility(ObsScene, ObsSource, true);
         }
         catch (Exception ex)
         {
@@ -108,6 +117,9 @@ public class CPHInline
             {
                 CPH.SendMessage("Spotify monitor was not paused.");
             }
+
+            // Hide the "using Spotify elsewhere" notice now that music is back.
+            CPH.ObsSetSourceVisibility(ObsScene, ObsSource, false);
         }
         catch (Exception ex)
         {
