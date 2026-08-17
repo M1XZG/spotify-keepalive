@@ -20,10 +20,17 @@ using System.IO;
 
 public class CPHInline
 {
-    // OBS scene/source shown to viewers while the monitor is paused, i.e. when
-    // Spotify is being used elsewhere so no music is playing on stream.
-    private const string ObsScene = "Spotify stream";
+    // OBS source that always stays visible; we trigger its fade filters instead
+    // of showing/hiding it. "Fade In" is applied on pause (Spotify in use
+    // elsewhere), "Fade Out" on resume (music is back on stream).
     private const string ObsSource = "Music Streaming Elsewhere";
+    private const string FadeInFilter = "Fade In";
+    private const string FadeOutFilter = "Fade Out";
+    // ObsSetFilterState "state" values: 0 = visible/enabled, 1 = hidden/disabled.
+    private const int FilterVisible = 0;
+    private const int FilterHidden = 1;
+    // OBS WebSocket connection index configured in Streamer.bot (Settings > OBS).
+    private const int ObsConnection = 0;
 
     public bool Execute()
     {
@@ -92,9 +99,9 @@ public class CPHInline
                 CPH.SendMessage("Spotify monitor paused. Use !spm on to resume.");
             }
 
-            // Show the "using Spotify elsewhere" notice so viewers know why
+            // Fade the "using Spotify elsewhere" notice in so viewers know why
             // there's no music on stream.
-            CPH.ObsSetSourceVisibility(ObsScene, ObsSource, true);
+            TriggerFadeFilter(FadeInFilter);
         }
         catch (Exception ex)
         {
@@ -118,8 +125,8 @@ public class CPHInline
                 CPH.SendMessage("Spotify monitor was not paused.");
             }
 
-            // Hide the "using Spotify elsewhere" notice now that music is back.
-            CPH.ObsSetSourceVisibility(ObsScene, ObsSource, false);
+            // Fade the "using Spotify elsewhere" notice out now that music is back.
+            TriggerFadeFilter(FadeOutFilter);
         }
         catch (Exception ex)
         {
@@ -127,6 +134,42 @@ public class CPHInline
             return false;
         }
         return true;
+    }
+
+    // Trigger a fade filter on the notice source, making sure the OBS WebSocket
+    // is actually connected first. After OBS restarts the connection is briefly
+    // dropped/stale, which is why a filter change right after a restart could
+    // silently do nothing. We reconnect and retry here. The filter is disabled
+    // first, then enabled, so the fade re-fires every time the command runs.
+    private void TriggerFadeFilter(string filterName)
+    {
+        if (!EnsureObsConnected())
+        {
+            CPH.LogWarn($"SPM: OBS not connected (connection {ObsConnection}); "
+                + $"could not apply filter '{filterName}' on '{ObsSource}'.");
+            CPH.SendMessage("Spotify monitor: OBS isn't connected, couldn't update the on-screen notice.");
+            return;
+        }
+        // Reset then enable so a fade filter re-triggers on repeated commands.
+        // ObsSetFilterState(sourceHoldingFilter, filterName, state, connection).
+        CPH.ObsSetFilterState(ObsSource, filterName, FilterHidden, ObsConnection);
+        System.Threading.Thread.Sleep(50);
+        CPH.ObsSetFilterState(ObsSource, filterName, FilterVisible, ObsConnection);
+    }
+
+    // Return true once the OBS WebSocket is connected, attempting a (re)connect
+    // and waiting briefly for it to come up.
+    private bool EnsureObsConnected()
+    {
+        if (CPH.ObsIsConnected(ObsConnection)) return true;
+
+        CPH.ObsConnect(ObsConnection);
+        for (int i = 0; i < 10; i++)
+        {
+            if (CPH.ObsIsConnected(ObsConnection)) return true;
+            System.Threading.Thread.Sleep(200);
+        }
+        return CPH.ObsIsConnected(ObsConnection);
     }
 
     private bool Status(string path)
